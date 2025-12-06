@@ -1,0 +1,180 @@
+// Prisma Schema for Multi-Tenant Shopify Data Platform
+// SQLite version - supports multiple Shopify stores (tenants) with isolated data
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// TENANT & USER MANAGEMENT
+// ============================================
+
+model Tenant {
+  id                 String   @id @default(uuid())
+  name               String
+  shopifyDomain      String   @unique
+  shopifyAccessToken String?
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  // Relations
+  users     User[]
+  customers Customer[]
+  orders    Order[]
+  products  Product[]
+  events    Event[]
+  syncLogs  SyncLog[]
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      String   @default("ADMIN")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+// ============================================
+// SHOPIFY DATA MODELS
+// ============================================
+
+model Customer {
+  id               String    @id @default(uuid())
+  shopifyId        String
+  email            String?
+  firstName        String?
+  lastName         String?
+  phone            String?
+  ordersCount      Int       @default(0)
+  totalSpent       Float     @default(0)
+  currency         String    @default("INR")
+  acceptsMarketing Boolean   @default(false)
+  tags             String?   // JSON string for array
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  shopifyCreatedAt DateTime?
+  shopifyUpdatedAt DateTime?
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  orders Order[]
+  events Event[]
+
+  @@unique([tenantId, shopifyId])
+}
+
+model Order {
+  id                String    @id @default(uuid())
+  shopifyId         String
+  orderNumber       String
+  email             String?
+  financialStatus   String?
+  fulfillmentStatus String?
+  totalPrice        Float     @default(0)
+  subtotalPrice     Float     @default(0)
+  totalTax          Float     @default(0)
+  totalDiscount     Float     @default(0)
+  currency          String    @default("INR")
+  itemCount         Int       @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  shopifyCreatedAt  DateTime?
+  shopifyUpdatedAt  DateTime?
+  cancelledAt       DateTime?
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  lineItems LineItem[]
+
+  @@unique([tenantId, shopifyId])
+}
+
+model LineItem {
+  id        String @id @default(uuid())
+  shopifyId String
+  title     String
+  quantity  Int
+  price     Float  @default(0)
+  sku       String?
+  productId String?
+  variantId String?
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model Product {
+  id                String    @id @default(uuid())
+  shopifyId         String
+  title             String
+  handle            String?
+  productType       String?
+  vendor            String?
+  status            String    @default("active")
+  tags              String?   // JSON string for array
+  imageUrl          String?
+  price             Float?
+  compareAtPrice    Float?
+  inventoryQuantity Int       @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  shopifyCreatedAt  DateTime?
+  shopifyUpdatedAt  DateTime?
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, shopifyId])
+}
+
+// ============================================
+// CUSTOM EVENTS
+// ============================================
+
+model Event {
+  id        String   @id @default(uuid())
+  eventType String
+  eventData String?  // JSON string
+  sessionId String?
+  createdAt DateTime @default(now())
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+}
+
+// ============================================
+// SYNC LOGS
+// ============================================
+
+model SyncLog {
+  id           String    @id @default(uuid())
+  syncType     String
+  status       String
+  recordsCount Int       @default(0)
+  errorMessage String?
+  startedAt    DateTime  @default(now())
+  completedAt  DateTime?
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
